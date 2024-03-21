@@ -156,7 +156,7 @@ def main(trader):
 
 
 if __name__ == '__main__':
-    with shift.Trader("ol_college_try_000") as trader:
+    with shift.Trader("ol_college_try_test000") as trader:
         trader.connect("initiator.cfg", "vmdZPOG2")
         sleep(1)
         trader.sub_all_order_book()
