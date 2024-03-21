@@ -4,5 +4,5 @@
 
 ## Team Members
 
-**Team Lead:** Andrew Anantharajah
+**Team Lead:** Andrew Anantharajah \
 **Team Members:** Anjali Chandrasekhar, Chris Persico
