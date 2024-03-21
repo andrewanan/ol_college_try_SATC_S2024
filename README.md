@@ -1,6 +1,6 @@
 # Ol' College Try
 
-!(https://theinfinityplane.files.wordpress.com/2013/04/01-calvin-and-hobbes-its-a-magical-world-by-bill-watterson.jpg)
+<img src="img/readmecomic.png" alt="Relevant Comic">
 
 ## Team Members
 
