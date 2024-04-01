@@ -3,6 +3,9 @@ from time import sleep
 from datetime import datetime, timedelta
 import datetime as dt
 from threading import Thread
+from statsmodels.tsa.arima.model import ARIMA
+import numpy as np
+#import talib
 
 # NOTE: for documentation on the different classes and methods used to interact with the SHIFT system, 
 # see: https://github.com/hanlonlab/shift-python/wiki
@@ -49,57 +52,60 @@ def strategy(trader: shift.Trader, ticker: str, endtime):
     # NOTE: Unlike the following sample strategy, it is highly reccomended that you track and account for your buying power and
     # position sizes throughout your algorithm to ensure both that have adequite captial to trade throughout the simulation and
     # that you are able to close your position at the end of the strategy without incurring major losses.
-
-    initial_pl = trader.get_portfolio_item(ticker).get_realized_pl()
+    print(f"Running strategy for {ticker}")
 
     # strategy parameters
+    historical_prices = []
+    stock_spread = []
     check_freq = 1
     order_size = 5  # NOTE: this is 5 lots which is 500 shares.
-
-    # strategy variables
-    best_price = trader.get_best_price(ticker)
-    best_bid = best_price.get_bid_price()
-    best_ask = best_price.get_ask_price()
-    previous_price = (best_bid + best_ask) / 2
-
     while (trader.get_last_trade_time() < endtime):
-        # cancel unfilled orders from previous time-step
-        cancel_orders(trader, ticker)
+        bp = trader.get_best_price(ticker)
+        best_bid = bp.get_bid_price()
+        best_ask = bp.get_ask_price()
+        bid_amt = bp.get_bid_size()
+        ask_amt = bp.get_ask_size()
+        midprice = (best_bid + best_ask) /2 
+        spread = best_bid - best_ask
+# get_sample_prices() <- replace with this
+        stock_spread.append(spread)
+        historical_prices.append(midprice)
 
-        # get necessary data
-        best_price = trader.get_best_price(ticker)
-        best_bid = best_price.get_bid_price()
-        best_ask = best_price.get_ask_price()
-        midprice = (best_bid + best_ask) / 2
+        if len(historical_prices) > 30:
+            historical_prices = historical_prices[-30:]
+            prices_series = np.log(historical_prices)
 
-        # place order
-        if (midprice > previous_price):  # price has increased since last timestep
-            # we predict price will continue to go up
-            order = shift.Order(
-                shift.Order.Type.MARKET_BUY, ticker, order_size)
-            trader.submit_order(order)
-        elif (midprice < previous_price):  # price has decreased since last timestep
-            # we predict price will continue to go down
-            order = shift.Order(
-                shift.Order.Type.MARKET_SELL, ticker, order_size)
-            trader.submit_order(order)
+            model = ARIMA(prices_series, order = (5,2,3))
+            model_fit = model.fit(disp=0)
+            
+            forecast = model_fit.forecast(steps=1)[0]
 
-            # NOTE: If you place a sell order larger than your current long position, it will result in a short sale, which
-            # requires buying power both for the initial short_sale and to close your short position.For example, if we short
-            # sell 1 lot of a stock trading at $100, it will consume 100*100 = $10000 of our buying power. Then, in order to
-            # close that position, assuming the price has not changed, it will require another $10000 of buying power, after
-            # which our pre short-sale buying power will be restored, minus any transaction costs. Therefore, it requires
-            # double the buying power to open and close a short position than a long position.
+            if forecast > 0:
+                order = shift.Order(shift.Order.Type.MARKET_BUY, ticker, order_size)
+                trader.submit_order(order)
+                print(f"Buying {ticker} x {order_size}")
 
-        previous_price = midprice
+            elif forecast < 0:
+                order = shift.Order(shift.Order.Type.MARKET_SELL, ticker, order_size)
+                trader.submit_order(order)
+                print(f"Selling {ticker} x {order_size}")
         sleep(check_freq)
+        if len(stock_spread) > 30:
+            stock_spread = stock_spread[-30:]
+    
+    sleep(check_freq)
+    #print(f"Price History: {historical_prices}")
+    #print(f"Bid Ask Spread: {stock_spread}")
+    
+
+
 
     # cancel unfilled orders and close positions for this ticker
     cancel_orders(trader, ticker)
     close_positions(trader, ticker)
+    print(f"Total P&L for {ticker}: {trader.get_portfolio_item(ticker).get_realized_pl()}")
 
-    print(
-        f"total profits/losses for {ticker}: {trader.get_portfolio_item(ticker).get_realized_pl() - initial_pl}")
+   #print(f"total profits/losses for {ticker}: {trader.get_portfolio_item(ticker).get_realized_pl()}))
 
 
 def main(trader):
@@ -109,20 +115,19 @@ def main(trader):
     # start_time = datetime.combine(current, dt.time(9, 30, 0))
     # end_time = datetime.combine(current, dt.time(15, 50, 0))
     start_time = current
-    end_time = start_time + timedelta(minutes=1)
-
+    end_time = start_time + timedelta(minutes=360)
+#390 mins in a trading day
     while trader.get_last_trade_time() < start_time:
         print("still waiting for market open")
         sleep(check_frequency)
 
     # we track our overall initial profits/losses value to see how our strategy affects it
     initial_pl = trader.get_portfolio_summary().get_total_realized_pl()
-
     threads = []
 
     # in this example, we simultaneously and independantly run our trading alogirthm on two tickers
-    tickers = ["AAPL", "MSFT"]
-
+    tickers = trader.get_stock_list()
+    
     print("START")
 
     for ticker in tickers:
@@ -153,6 +158,7 @@ def main(trader):
     print(f"final bp: {trader.get_portfolio_summary().get_total_bp()}")
     print(
         f"final profits/losses: {trader.get_portfolio_summary().get_total_realized_pl() - initial_pl}")
+
 
 
 if __name__ == '__main__':
