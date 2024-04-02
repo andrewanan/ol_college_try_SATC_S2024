@@ -5,7 +5,7 @@ import datetime as dt
 from threading import Thread
 from statsmodels.tsa.arima.model import ARIMA
 import numpy as np
-#import talib
+import math
 
 # NOTE: for documentation on the different classes and methods used to interact with the SHIFT system, 
 # see: https://github.com/hanlonlab/shift-python/wiki
@@ -16,6 +16,7 @@ def cancel_orders(trader, ticker):
         if (order.symbol == ticker):
             trader.submit_cancellation(order)
             sleep(1)  # the order cancellation needs a little time to go through
+
 
 
 def close_positions(trader, ticker):
@@ -49,15 +50,13 @@ def close_positions(trader, ticker):
 
 
 def strategy(trader: shift.Trader, ticker: str, endtime):
-    # NOTE: Unlike the following sample strategy, it is highly reccomended that you track and account for your buying power and
-    # position sizes throughout your algorithm to ensure both that have adequite captial to trade throughout the simulation and
-    # that you are able to close your position at the end of the strategy without incurring major losses.
+    
     print(f"Running strategy for {ticker}")
 
     # strategy parameters
     historical_prices = []
     stock_spread = []
-    check_freq = 1
+    check_freq = 5
     order_size = 5  # NOTE: this is 5 lots which is 500 shares.
     while (trader.get_last_trade_time() < endtime):
         bp = trader.get_best_price(ticker)
@@ -76,7 +75,7 @@ def strategy(trader: shift.Trader, ticker: str, endtime):
             prices_series = np.log(historical_prices)
 
             model = ARIMA(prices_series, order = (5,2,3))
-            model_fit = model.fit(disp=0)
+            model_fit = model.fit()
             
             forecast = model_fit.forecast(steps=1)[0]
 
@@ -115,7 +114,7 @@ def main(trader):
     # start_time = datetime.combine(current, dt.time(9, 30, 0))
     # end_time = datetime.combine(current, dt.time(15, 50, 0))
     start_time = current
-    end_time = start_time + timedelta(minutes=360)
+    end_time = start_time + timedelta(minutes=5)
 #390 mins in a trading day
     while trader.get_last_trade_time() < start_time:
         print("still waiting for market open")
@@ -147,7 +146,9 @@ def main(trader):
     for thread in threads:
         # NOTE: this method can stall your program indefinitely if your strategy does not terminate naturally
         # setting the timeout argument for join() can prevent this
-        thread.join()
+        thread.join(timeout=30)
+
+    
 
     # make sure all remaining orders have been cancelled and all positions have been closed
     for ticker in tickers:
@@ -162,7 +163,7 @@ def main(trader):
 
 
 if __name__ == '__main__':
-    with shift.Trader("ol_college_try") as trader:
+    with shift.Trader("ol_college_try_test002") as trader:
         trader.connect("initiator.cfg", "vmdZPOG2")
         sleep(1)
         trader.sub_all_order_book()
