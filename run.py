@@ -2,13 +2,27 @@ import shift
 from time import sleep
 from datetime import datetime, timedelta
 import datetime as dt
-from threading import Thread
+from threading import Thread, Lock
 from statsmodels.tsa.arima.model import ARIMA
 import numpy as np
 import math
 
+
 # NOTE: for documentation on the different classes and methods used to interact with the SHIFT system, 
 # see: https://github.com/hanlonlab/shift-python/wiki
+
+class tradeCounter:
+    def __init__ (self):
+        self.count = 0
+        self.lock = Lock()
+
+    def increment(self):
+        with self.lock:
+            self.count += 1
+    
+    def get_count(self):
+        with self.lock:
+            return self.count
 
 def cancel_orders(trader, ticker):
     # cancel all the remaining orders
@@ -49,7 +63,7 @@ def close_positions(trader, ticker):
         sleep(1)
 
 
-def strategy(trader: shift.Trader, ticker: str, endtime):
+def strategy(trader: shift.Trader, ticker: str, endtime, trade_counter : tradeCounter):
     
     print(f"Running strategy for {ticker}")
 
@@ -57,7 +71,7 @@ def strategy(trader: shift.Trader, ticker: str, endtime):
     historical_prices = []
     stock_spread = []
     check_freq = 5
-    order_size = 5  # NOTE: this is 5 lots which is 500 shares.
+    order_size = 3  # NOTE: this is 5 lots which is 500 shares.
     while (trader.get_last_trade_time() < endtime):
         bp = trader.get_best_price(ticker)
         best_bid = bp.get_bid_price()
@@ -83,6 +97,7 @@ def strategy(trader: shift.Trader, ticker: str, endtime):
                 order = shift.Order(shift.Order.Type.MARKET_BUY, ticker, order_size)
                 trader.submit_order(order)
                 print(f"Buying {ticker} x {order_size}")
+                trade_counter.increment()
 
             elif forecast < 0:
                 order = shift.Order(shift.Order.Type.MARKET_SELL, ticker, order_size)
@@ -114,7 +129,7 @@ def main(trader):
     # start_time = datetime.combine(current, dt.time(9, 30, 0))
     # end_time = datetime.combine(current, dt.time(15, 50, 0))
     start_time = current
-    end_time = start_time + timedelta(minutes=5)
+    end_time = start_time + timedelta(minutes=30)
 #390 mins in a trading day
     while trader.get_last_trade_time() < start_time:
         print("still waiting for market open")
@@ -129,10 +144,12 @@ def main(trader):
     
     print("START")
 
+    trade_counter = tradeCounter()
+
     for ticker in tickers:
         # initializes threads containing the strategy for each ticker
         threads.append(
-            Thread(target=strategy, args=(trader, ticker, end_time)))
+            Thread(target=strategy, args=(trader, ticker, end_time, trade_counter)))
 
     for thread in threads:
         thread.start()
@@ -157,13 +174,13 @@ def main(trader):
 
     print("END")
     print(f"final bp: {trader.get_portfolio_summary().get_total_bp()}")
-    print(
-        f"final profits/losses: {trader.get_portfolio_summary().get_total_realized_pl() - initial_pl}")
+    print(f"final profits/losses: {trader.get_portfolio_summary().get_total_realized_pl() - initial_pl}")
+    print(f"orders: {trade_counter.get_count()}")
 
 
 
 if __name__ == '__main__':
-    with shift.Trader("ol_college_try_test002") as trader:
+    with shift.Trader("ol_college_try") as trader:
         trader.connect("initiator.cfg", "vmdZPOG2")
         sleep(1)
         trader.sub_all_order_book()

@@ -7,8 +7,6 @@
 **Team Lead:** Andrew Anantharajah \
 **Team Members:** Anjali Chandrasekhar, Chris Persico
 
-Please ignore newrun.py
-ONLY RUN run.py
 
 
 
