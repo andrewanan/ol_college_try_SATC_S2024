@@ -129,8 +129,8 @@ def main(trader):
     # start_time = datetime.combine(current, dt.time(9, 30, 0))
     # end_time = datetime.combine(current, dt.time(15, 50, 0))
     start_time = current
-    end_time = start_time + timedelta(minutes=30)
-#390 mins in a trading day
+    end_time = start_time + timedelta(minutes=300)
+#390 mins in a trading day try 150 for 200 trades.
     while trader.get_last_trade_time() < start_time:
         print("still waiting for market open")
         sleep(check_frequency)
